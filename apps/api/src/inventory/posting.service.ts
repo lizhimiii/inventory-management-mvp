@@ -200,5 +200,6 @@ export class InventoryPostingService {
     if ([DocumentType.PRODUCTION_ISSUE, DocumentType.PRODUCTION_RETURN].includes(doc.document_type)) { if (lines.some(line => line.source_warehouse_type !== 'RAW' || line.item_type !== 'MATERIAL')) throw new BusinessException('VALIDATION_ERROR', '生产领退料必须从启用的原材料仓库处理原材料'); return; }
     if (doc.document_type === DocumentType.PRODUCTION_COMPLETION) { if (warehouseType !== 'FG' || lines.some(line => line.item_type !== 'FINISHED_GOOD')) throw new BusinessException('VALIDATION_ERROR', '完工入库只能包含成品且送审意向仓库必须是成品仓库'); return; }
     if ([DocumentType.FINISHED_INBOUND, DocumentType.FINISHED_OUTBOUND].includes(doc.document_type)) { if (lines.some(line => line.item_status !== 'ACTIVE')) throw new BusinessException('VALIDATION_ERROR', '成品入出库只能包含启用物料'); if (warehouseType !== 'FG' || lines.some(line => line.item_type !== 'FINISHED_GOOD')) throw new BusinessException('VALIDATION_ERROR', '成品入出库必须使用成品仓库且只能包含成品'); }
+    if (doc.document_type === DocumentType.MATERIAL_SALES_OUTBOUND) { if (warehouseType !== 'RAW' || lines.some(line => line.item_type !== 'MATERIAL')) throw new BusinessException('VALIDATION_ERROR', '销售出库必须使用原材料仓库且只能包含原材料'); }
   }
 }

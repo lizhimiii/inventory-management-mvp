@@ -64,12 +64,12 @@ export class StockDocumentsService {
 
   async create(type: DocumentType, dto: any, user: AuthUser) {
     const userId = user.id;
-    if (type === DocumentType.FINISHED_OUTBOUND && !dto.warehouseId) {
+    if ((type === DocumentType.FINISHED_OUTBOUND || type === DocumentType.MATERIAL_SALES_OUTBOUND) && !dto.warehouseId) {
       throw this.lineError(0, 'locationId', 'SOURCE_LOCATION_REQUIRED', '请先选择来源库位');
     }
     const qr = this.db.createQueryRunner(); await qr.connect(); await qr.startTransaction();
     try {
-      const expectedType = type === DocumentType.MATERIAL_INBOUND ? 'RAW' : type === DocumentType.FINISHED_OUTBOUND || type === DocumentType.FINISHED_INBOUND ? 'FG' : undefined;
+      const expectedType = type === DocumentType.MATERIAL_INBOUND || type === DocumentType.MATERIAL_SALES_OUTBOUND ? 'RAW' : type === DocumentType.FINISHED_OUTBOUND || type === DocumentType.FINISHED_INBOUND ? 'FG' : undefined;
       const [warehouse] = dto.warehouseId
         ? await qr.query(`SELECT id,warehouse_type FROM warehouses WHERE id=$1 AND status='ACTIVE' AND deleted_at IS NULL`, [dto.warehouseId])
         : await qr.query(`SELECT id,warehouse_type FROM warehouses WHERE warehouse_type=$1 AND status='ACTIVE' AND deleted_at IS NULL ORDER BY warehouse_code LIMIT 1`, [expectedType]);
@@ -336,7 +336,7 @@ export class StockDocumentsService {
         await this.reservations.releaseDocument(qr, id);
         await this.approvalHistory.record(qr,id,'WITHDRAWN','SUBMITTED','DRAFT',userId,{ reason:'编辑待审核单据自动撤回' });
       }
-      if (![DocumentType.MATERIAL_INBOUND, DocumentType.FINISHED_INBOUND, DocumentType.FINISHED_OUTBOUND, DocumentType.STOCK_MOVE].includes(doc.document_type)) throw new BusinessException('INVALID_STATUS', '该单据不能在此编辑');
+      if (![DocumentType.MATERIAL_INBOUND, DocumentType.FINISHED_INBOUND, DocumentType.FINISHED_OUTBOUND, DocumentType.MATERIAL_SALES_OUTBOUND, DocumentType.STOCK_MOVE].includes(doc.document_type)) throw new BusinessException('INVALID_STATUS', '该单据不能在此编辑');
       let lines = doc.document_type === DocumentType.STOCK_MOVE
         ? dto.lines : doc.document_type === DocumentType.FINISHED_INBOUND ? dto.lines : await this.fillDefaultLocations(qr, dto.lines, doc.warehouse_id);
       // 部分过账后的原材料入库单：POSTED 明细不可改，从编辑载荷中剔除并原样保留
@@ -658,11 +658,11 @@ export class StockDocumentsService {
     await this.warehouseAccess.assertWarehouse(user, q.warehouseId);
     const [warehouse] = await this.db.query(`SELECT id,warehouse_code "warehouseCode",name,warehouse_type "warehouseType" FROM warehouses WHERE id=$1 AND status='ACTIVE' AND deleted_at IS NULL`, [q.warehouseId]);
     if (!warehouse) throw new BusinessException('VALIDATION_ERROR', '仓库不存在或已停用');
-    if (q.purpose === 'OUTBOUND' && warehouse.warehouseType !== 'FG') throw new BusinessException('VALIDATION_ERROR', '成品出库只能选择成品仓');
+    if (q.purpose === 'OUTBOUND' && !['FG', 'RAW'].includes(warehouse.warehouseType)) throw new BusinessException('VALIDATION_ERROR', '出库只能选择原材料仓或成品仓');
     const itemType = q.purpose === 'OUTBOUND'
-      ? ItemType.FINISHED_GOOD
+      ? warehouse.warehouseType === 'RAW' ? ItemType.MATERIAL : warehouse.warehouseType === 'FG' ? ItemType.FINISHED_GOOD : undefined
       : warehouse.warehouseType === 'RAW' ? ItemType.MATERIAL : warehouse.warehouseType === 'FG' ? ItemType.FINISHED_GOOD : undefined;
-    if (!itemType) throw new BusinessException('VALIDATION_ERROR', q.purpose === 'OUTBOUND' ? '成品出库只能选择成品仓' : '普通移库只支持原材料仓或成品仓');
+    if (!itemType) throw new BusinessException('VALIDATION_ERROR', q.purpose === 'OUTBOUND' ? '出库只能选择原材料仓或成品仓' : '普通移库只支持原材料仓或成品仓');
 
     const page = parsePage(q.page, 1);
     const pageSize = parsePage(q.pageSize, 100, 100);
@@ -897,6 +897,8 @@ export class StockDocumentsService {
     if (!row) return;
     const updated = await qr.query(`UPDATE approval_task SET status=$1,approval_opinion=$2,approved_at=now() WHERE approval_instance_id=$3 AND approver_user_id=$4 AND status='PENDING'`, [status, reason || null, row.id, actorId]);
     if (!updated[1]) throw new BusinessException('FORBIDDEN', '当前账号不是该审批任务的审批人');
+    // 多人审批场景：一个人通过/驳回后，其他人的 PENDING task 自动关闭
+    await qr.query(`UPDATE approval_task SET status='REVOKED',approved_at=now(),approval_opinion=$1 WHERE approval_instance_id=$2 AND approver_user_id<>$3 AND status='PENDING'`, [`其他审批人已${status==='APPROVED'?'通过':'驳回'}，任务自动关闭`, row.id, actorId]);
     await qr.query(`UPDATE approval_instance SET status=$1,completed_at=now() WHERE id=$2`, [status, row.id]);
     await qr.query(`INSERT INTO notification(receiver_user_id,type,title,content,business_type,business_id) VALUES($1,$2,$3,$4,$5,$6)`,
       [row.applicant_user_id, status === 'APPROVED' ? 'APPROVAL_APPROVED' : 'APPROVAL_REJECTED', status === 'APPROVED' ? '审批已通过' : '审批已驳回',
@@ -1144,8 +1146,8 @@ export class StockDocumentsService {
     const items = await qr.query(`SELECT id,item_type,status FROM items WHERE id=ANY($1::uuid[]) AND deleted_at IS NULL`, [ids]);
     if (items.length !== ids.length || items.some((item: any) => item.status !== 'ACTIVE')) throw new BusinessException('VALIDATION_ERROR', '单据只能包含启用物料');
     if (type !== DocumentType.INVENTORY_ADJUSTMENT) {
-      const expected = type === DocumentType.MATERIAL_INBOUND ? ItemType.MATERIAL : ItemType.FINISHED_GOOD;
-      if (items.some((item: any) => item.item_type !== expected)) throw new BusinessException('VALIDATION_ERROR', expected === ItemType.MATERIAL ? '原材料入库只能包含原材料' : '成品入库或出库只能包含成品');
+      const expected = type === DocumentType.MATERIAL_INBOUND || type === DocumentType.MATERIAL_SALES_OUTBOUND ? ItemType.MATERIAL : ItemType.FINISHED_GOOD;
+      if (items.some((item: any) => item.item_type !== expected)) throw new BusinessException('VALIDATION_ERROR', expected === ItemType.MATERIAL ? '原材料相关单据只能包含原材料' : '成品入出库只能包含成品');
     }
     await this.validateLocations(qr, lines, warehouseId, false);
     try {

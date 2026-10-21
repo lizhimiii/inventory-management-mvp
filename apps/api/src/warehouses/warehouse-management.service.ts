@@ -54,7 +54,8 @@ export class WarehouseManagementService {
       FROM warehouse_locations l JOIN warehouse_zones z ON z.id=l.zone_id LEFT JOIN stock_balances sb ON sb.location_id=l.id WHERE ${filter}`, [id]);
     const [lock] = await this.effectiveLock(this.db, scope.warehouseId, scope.zoneId, scope.locationId);
     const alerts = await this.db.query(`SELECT id,alert_type "alertType",message,status,updated_at "updatedAt" FROM inventory_alerts WHERE warehouse_id=$1 AND status='OPEN' ORDER BY updated_at DESC LIMIT 20`, [scope.warehouseId]);
-    return { type, ...detail, ...counts, metricsByUnit, lock: lock || null, alerts };
+    const managers = type === 'warehouse' ? await this.db.query(`SELECT wm.user_id "userId",u.name,u.username FROM warehouse_manager wm JOIN users u ON u.id=wm.user_id WHERE wm.warehouse_id=$1 AND u.status='ACTIVE' AND u.deleted_at IS NULL ORDER BY wm.created_at,u.username`, [id]) : [];
+    return { type, ...detail, ...counts, metricsByUnit, lock: lock || null, alerts, managers };
   }
 
   async materials(user: AuthUser, locationId: string, q: any) {

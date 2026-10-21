@@ -17,7 +17,7 @@ type Mode = 'ZONE' | 'LOCATION';
 type View = { x: number; y: number; scale: number };
 type Operation = 'inbound' | 'outbound' | 'move' | 'count';
 
-const label: Record<string, string> = { DISABLED: '已停用', FULL: '满库', LOCKED: '库存锁定', WARNING: '容量预警', LOW: '低库存', NORMAL: '正常', EMPTY: '空库位', MATERIAL_INBOUND: '原材料入库', FINISHED_INBOUND: '成品入库', FINISHED_OUTBOUND: '成品出库', STOCK_MOVE: '移库', STOCK_CHECK: '盘点', DRAFT: '草稿', SUBMITTED: '待审批', POSTED: '已过账', REJECTED: '已驳回' };
+const label: Record<string, string> = { DISABLED: '已停用', FULL: '满库', LOCKED: '库存锁定', WARNING: '容量预警', LOW: '低库存', NORMAL: '正常', EMPTY: '空库位', MATERIAL_INBOUND: '原材料入库', FINISHED_INBOUND: '成品入库', FINISHED_OUTBOUND: '成品出库', MATERIAL_SALES_OUTBOUND: '销售出库', STOCK_MOVE: '移库', STOCK_CHECK: '盘点', DRAFT: '草稿', SUBMITTED: '待审批', POSTED: '已过账', REJECTED: '已驳回' };
 const color: Record<string, string> = { DISABLED: '#aeb7c4', FULL: '#ff4d4f', LOCKED: '#9254de', WARNING: '#fa8c16', LOW: '#f0b429', NORMAL: '#52c41a', EMPTY: '#69b1ff' };
 const n = (value: any) => Number(value || 0);
 const show = (value: any, fallback = '—') => String(value || '').trim() || fallback;

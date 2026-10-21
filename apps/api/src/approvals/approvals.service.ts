@@ -104,7 +104,7 @@ export class ApprovalsService {
       const [row]=await qr.query(`SELECT t.id,t.approval_instance_id,a.applicant_user_id,d.document_no,d.document_type FROM approval_task t JOIN approval_instance a ON a.id=t.approval_instance_id JOIN stock_documents d ON d.id=a.document_id WHERE d.id=$1 AND t.approver_user_id=$2 AND t.status='PENDING' FOR UPDATE`,[id,user.id]);
       if(!row) throw new BusinessException('FORBIDDEN','当前账号不是该审批任务的审批人',HttpStatus.FORBIDDEN);
       if (newApproverId===user.id || newApproverId===row.applicant_user_id) throw new BusinessException('VALIDATION_ERROR','不能转交给当前审批人或发起人');
-      const [next]=await qr.query(`SELECT id,name FROM users WHERE id=$1 AND status='ACTIVE' AND deleted_at IS NULL AND can_approve=true AND position_type IN ('MANAGER','SYSTEM_ADMIN')`,[newApproverId]);
+      const [next]=await qr.query(`SELECT id,name FROM users WHERE id=$1 AND status='ACTIVE' AND deleted_at IS NULL AND can_approve=true AND position_type IN ('MANAGER','SYSTEM_ADMIN','WAREHOUSE_MANAGER')`,[newApproverId]);
       if(!next) throw new BusinessException('VALIDATION_ERROR','新的审批人无效');
       await qr.query(`UPDATE approval_task SET status='TRANSFERRED',approved_at=now() WHERE id=$1`,[row.id]);
       await qr.query(`INSERT INTO approval_task(approval_instance_id,approver_user_id,approver_name,status) VALUES($1,$2,$3,'PENDING') ON CONFLICT(approval_instance_id,approver_user_id) DO UPDATE SET status='PENDING',approved_at=NULL`,[row.approval_instance_id,newApproverId,next.name]);

@@ -20,7 +20,7 @@ const safe = (value: any, fallback: any = '—'): any => value === undefined || 
 const dateTime = formatBeijingTime;
 const can = (user: UserLike, permission: string) => user.role === 'ADMIN' || Boolean(user.permissions?.includes(permission));
 const typeOptions = [
-  'MATERIAL_INBOUND', 'FINISHED_INBOUND', 'FINISHED_OUTBOUND', 'INVENTORY_ADJUSTMENT', 'STOCK_MOVE', 'STOCK_CHECK',
+  'MATERIAL_INBOUND', 'FINISHED_INBOUND', 'FINISHED_OUTBOUND', 'MATERIAL_SALES_OUTBOUND', 'INVENTORY_ADJUSTMENT', 'STOCK_MOVE', 'STOCK_CHECK',
   'PRODUCTION_ISSUE', 'PRODUCTION_RETURN', 'PRODUCTION_COMPLETION',
   'DEFECTIVE_RETURN', 'DEFECTIVE_REPAIR_RESTOCK', 'DEFECTIVE_PRODUCTION_RETURN', 'REVERSAL',
 ].map(value => ({ value, label: statusText[value] || value }));
@@ -229,6 +229,7 @@ function DocumentsTab({ user, params, updateParams, warehouses }: any) {
     }
     const path: Record<string, string> = {
       MATERIAL_INBOUND: '/inbound', FINISHED_INBOUND: '/finished-inbound', FINISHED_OUTBOUND: '/outbound',
+      MATERIAL_SALES_OUTBOUND: '/material-sales-outbound',
       INVENTORY_ADJUSTMENT: '/adjustments', STOCK_MOVE: '/moves',
     };
     navigate(`${path[detail.documentType] || '/inventory/management'}?documentId=${detail.id}`);

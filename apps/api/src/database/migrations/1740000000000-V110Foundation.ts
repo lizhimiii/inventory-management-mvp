@@ -135,7 +135,7 @@ export class V110Foundation1740000000000 implements MigrationInterface {
       ALTER TABLE stock_balances ALTER COLUMN location_id SET NOT NULL;
       ALTER TABLE stock_balances DROP CONSTRAINT IF EXISTS stock_balances_warehouse_id_item_id_key;
       CREATE UNIQUE INDEX ux_stock_balance_dimension
-        ON stock_balances(warehouse_id,location_id,item_id,batch_id) NULLS NOT DISTINCT;
+        ON stock_balances(warehouse_id,location_id,item_id,batch_id);
 
       DROP TRIGGER IF EXISTS trg_stock_transactions_immutable ON stock_transactions;
       ALTER TABLE stock_transactions ADD COLUMN location_id uuid REFERENCES warehouse_locations(id);

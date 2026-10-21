@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
 import { useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -213,21 +213,22 @@ export function BatchesPage() {
   </PageScaffold>;
 }
 
-type StockType = 'MATERIAL_INBOUND' | 'FINISHED_INBOUND' | 'FINISHED_OUTBOUND' | 'INVENTORY_ADJUSTMENT' | 'STOCK_MOVE';
+type StockType = 'MATERIAL_INBOUND' | 'FINISHED_INBOUND' | 'FINISHED_OUTBOUND' | 'MATERIAL_SALES_OUTBOUND' | 'INVENTORY_ADJUSTMENT' | 'STOCK_MOVE';
 const stockMeta: Record<StockType, { title: string; endpoint: string; itemType?: string }> = {
   MATERIAL_INBOUND: { title: '原材料入库', endpoint: '/stock-documents/material-inbound', itemType: 'MATERIAL' },
   FINISHED_INBOUND: { title: '成品入库', endpoint: '/stock-documents/finished-inbound', itemType: 'FINISHED_GOOD' },
   FINISHED_OUTBOUND: { title: '成品出库', endpoint: '/stock-documents/finished-outbound', itemType: 'FINISHED_GOOD' },
+  MATERIAL_SALES_OUTBOUND: { title: '销售出库', endpoint: '/stock-documents/material-sales-outbound', itemType: 'MATERIAL' },
   INVENTORY_ADJUSTMENT: { title: '库存调整', endpoint: '/stock-documents/inventory-adjustment' },
   STOCK_MOVE: { title: '移库', endpoint: '/stock-documents/move' },
 };
 
-function InboundItemCell({ index, form, items }: { index: number; form: any; items: any[] }) {
-  const reviewStatus = Form.useWatch(['lines', index, 'reviewStatus'], form);
-  const locked = reviewStatus === 'POSTED';
+function InboundItemCell({ index, form, items, itemOpts }: { index: number; form: any; items: any[]; itemOpts: any[] }) {
+  const row = Form.useWatch(['lines', index], form) || {};
+  const locked = row.reviewStatus === 'POSTED';
   return <Space size={4} style={{ width: '100%' }}>
     <Form.Item name={[index, 'itemId']} rules={[{ required: true, message: '请选择物料' }]} style={{ marginBottom: 0, flex: 1, minWidth: 160 }}>
-      <Select disabled={locked} showSearch optionFilterProp="label" placeholder="选择物料" options={items.map(item => ({ value: item.itemId || item.id, label: `${item.itemCode} ${item.name}` }))}
+      <Select disabled={locked} showSearch optionFilterProp="label" placeholder="选择物料" options={itemOpts}
         onChange={(itemId) => {
           const next = [...(form.getFieldValue('lines') || [])];
           next[index] = { itemId, quantity: 1, locationId: undefined, locationPath: undefined, locationDisplay: undefined, batchId: undefined, warehouseId: undefined, zoneId: undefined };
@@ -238,13 +239,11 @@ function InboundItemCell({ index, form, items }: { index: number; form: any; ite
   </Space>;
 }
 
-function InboundLocationCell({ index, form, locations, onPick }: { index: number; form: any; locations: any[]; onPick: () => void }) {
-  const locationId = Form.useWatch(['lines', index, 'locationId'], form);
-  const display = Form.useWatch(['lines', index, 'locationDisplay'], form);
-  const path = Form.useWatch(['lines', index, 'locationPath'], form);
-  const locked = Form.useWatch(['lines', index, 'reviewStatus'], form) === 'POSTED';
-  // 打开已保存单据（含 Excel 批量导入）时只有 locationId，没有 locationDisplay，需要按 id 反查库位编码
-  const resolved = locations.find((location: any) => location.id === locationId) || display;
+function InboundLocationCell({ index, form, locMap, onPick }: { index: number; form: any; locMap: Map<string, any>; onPick: () => void }) {
+  const row = Form.useWatch(['lines', index], form) || {};
+  const { locationId, locationDisplay: display, locationPath: path, reviewStatus } = row;
+  const locked = reviewStatus === 'POSTED';
+  const resolved = locationId ? locMap.get(locationId) || display : display;
   return <div>
     <Form.Item name={[index, 'locationId']} hidden rules={[{ required: true, message: '请选择入库位置' }]}><Input /></Form.Item>
     <Space size={4} wrap>
@@ -259,29 +258,32 @@ function InboundLocationCell({ index, form, locations, onPick }: { index: number
 }
 
 function InboundBatchCell({ index, form, batches }: { index: number; form: any; batches: any[] }) {
-  const itemId = Form.useWatch(['lines', index, 'itemId'], form);
-  const locked = Form.useWatch(['lines', index, 'reviewStatus'], form) === 'POSTED';
+  const row = Form.useWatch(['lines', index], form) || {};
+  const { itemId, reviewStatus } = row;
+  const locked = reviewStatus === 'POSTED';
+  const opts = itemId ? batches.filter(b => b.itemId === itemId).map(b => ({ value: b.id, label: b.batchNo })) : [];
   return <Form.Item name={[index, 'batchId']} style={{ marginBottom: 0 }}>
-    <Select disabled={locked} allowClear placeholder="无批次" options={batches.filter(batch => batch.itemId === itemId).map(batch => ({ value: batch.id, label: batch.batchNo }))} />
+    <Select disabled={locked} allowClear placeholder="无批次" options={opts} />
   </Form.Item>;
 }
 
 function InboundQuantityCell({ index, form }: { index: number; form: any }) {
-  const locked = Form.useWatch(['lines', index, 'reviewStatus'], form) === 'POSTED';
+  const row = Form.useWatch(['lines', index], form) || {};
+  const locked = row.reviewStatus === 'POSTED';
   return <Form.Item name={[index, 'quantity']} rules={[{ required: true, message: '必填' }]} style={{ marginBottom: 0 }}><InputNumber precision={0} min={1} disabled={locked} style={{ width: '100%' }} /></Form.Item>;
 }
 
 function InboundNotesCell({ index, form }: { index: number; form: any }) {
-  const locked = Form.useWatch(['lines', index, 'reviewStatus'], form) === 'POSTED';
+  const row = Form.useWatch(['lines', index], form) || {};
+  const locked = row.reviewStatus === 'POSTED';
   return <Form.Item name={[index, 'notes']} style={{ marginBottom: 0 }}><Input maxLength={300} disabled={locked} placeholder="包装明细等" /></Form.Item>;
 }
 
 function InboundReviewCell({ index, form }: { index: number; form: any }) {
-  const reviewStatus = Form.useWatch(['lines', index, 'reviewStatus'], form);
-  const remark = Form.useWatch(['lines', index, 'reviewRemark'], form);
-  const changes = Form.useWatch(['lines', index, 'reviewChanges'], form);
-  if (reviewStatus === 'POSTED') return <Tooltip title={Array.isArray(changes) && changes.length ? changes.map((c: any, i: number) => `${i + 1}. ${c.by} 将${c.field === 'quantity' ? '数量' : c.field === 'locationId' ? '库位' : '批次'} ${c.before ?? '空'} → ${c.after ?? '空'}`).join('\n') : '审核通过'}><Tag color="green">已入库</Tag></Tooltip>;
-  if (reviewStatus === 'REJECTED' && remark) return <Tooltip title={remark}><Tag color="red">已驳回</Tag></Tooltip>;
+  const row = Form.useWatch(['lines', index], form) || {};
+  const { reviewStatus, reviewRemark, reviewChanges } = row;
+  if (reviewStatus === 'POSTED') return <Tooltip title={Array.isArray(reviewChanges) && reviewChanges.length ? reviewChanges.map((c: any, i: number) => `${i + 1}. ${c.by} 将${c.field === 'quantity' ? '数量' : c.field === 'locationId' ? '库位' : '批次'} ${c.before ?? '空'} → ${c.after ?? '空'}`).join('\n') : '审核通过'}><Tag color="green">已入库</Tag></Tooltip>;
+  if (reviewStatus === 'REJECTED' && reviewRemark) return <Tooltip title={reviewRemark}><Tag color="red">已驳回</Tag></Tooltip>;
   return null;
 }
 
@@ -290,7 +292,7 @@ export function StockDocumentsV110Page({ type }: { type: StockType }) {
   const adjustment = type === 'INVENTORY_ADJUSTMENT';
   const moving = type === 'STOCK_MOVE';
   const inbound = type === 'MATERIAL_INBOUND' || type === 'FINISHED_INBOUND';
-  const outbound = type === 'FINISHED_OUTBOUND';
+  const outbound = type === 'FINISHED_OUTBOUND' || type === 'MATERIAL_SALES_OUTBOUND';
   // 原材料 / 成品入库共用同一套 Excel 批量导入，后端按 kind 区分单据类型、仓库类型与物料类型
   const batchKind: BatchInboundKind = type === 'FINISHED_INBOUND' ? 'finished-inbound' : 'material-inbound';
   const [rows, setRows] = useState<any[]>([]);
@@ -322,10 +324,15 @@ export function StockDocumentsV110Page({ type }: { type: StockType }) {
     // 物料下拉必须取全量：单页上限 100，物料超过 100 条时编码靠后的会从下拉中消失
     const pages = Math.ceil(Number(firstItems.total || 0) / 100);
     const restItemPages = pages > 1 ? await Promise.all(Array.from({ length: pages - 1 }, (_, index) => api(`/items?page=${index + 2}&pageSize=100&status=ACTIVE${meta.itemType ? `&itemType=${meta.itemType}` : ''}`))) : [];
+    // 库位超过 100 条也要全量拉，否则编辑已保存草稿时 locationId 反查不到
+    const locPages = Math.ceil(Number(locationRows.total || 0) / 100);
+    const restLocPages = locPages > 1 ? await Promise.all(Array.from({ length: locPages - 1 }, (_, index) => api(`/warehouse-locations?page=${index + 2}&pageSize=100`))) : [];
     setRows(docs.items); setItems([...(firstItems.items || []), ...restItemPages.flatMap((page: any) => page.items || [])]); setWarehouses(warehouseRows);
-    setLocations(locationRows.items.map(normalize)); setBatches(batchRows.items.map(normalize));
+    setLocations([...(locationRows.items || []), ...restLocPages.flatMap((page: any) => page.items || [])].map(normalize)); setBatches(batchRows.items.map(normalize));
   }).catch(fail);
   useEffect(() => { void load(); }, [type]);
+  const locMap = useMemo(() => new Map(locations.map(l => [l.id, l])), [locations]);
+  const itemOpts = useMemo(() => items.map(item => ({ value: item.itemId || item.id, label: `${item.itemCode} ${item.name}` })), [items]);
   useEffect(() => {
     const params = new URLSearchParams(route.search);
     if (openedFromQuery || params.get('new') !== '1') return;
@@ -436,10 +443,12 @@ export function StockDocumentsV110Page({ type }: { type: StockType }) {
     } catch (error) { fail(error); }
   };
   const edit = async (record: any) => {
+    const hide = message.loading({ content: '加载单据详情中...', key: 'docDetail', duration: 0 });
     try {
       const detail = await api(`/stock-documents/${record.id}`);
+      hide();
       setEditing(detail); form.setFieldsValue({ warehouseId: detail.warehouseId, notes: detail.notes, lines: detail.lines.map((line: any) => { const sourceLocationDisplay = { locationDisplayName: line.locationDisplayName || line.locationCode, actualPosition: line.actualPosition }; const targetLocationDisplay = { locationDisplayName: line.targetLocationDisplayName || line.targetLocationCode, actualPosition: line.targetActualPosition }; return { id: line.id, reviewStatus: line.reviewStatus, reviewRemark: line.reviewRemark, reviewChanges: line.reviewChanges, itemId: line.itemId, notes: line.notes, locationId: line.locationId, locationPath: locationDisplayName(sourceLocationDisplay), locationDisplay: sourceLocationDisplay, batchId: line.batchId, batchNo: line.batchNo, sourceKey: `${line.locationId}:${line.batchId || ''}`, sourceWarehouseId: line.sourceWarehouseId || detail.warehouseId, sourceZoneId: line.sourceZoneId, sourceLocationPath: locationDisplayName(sourceLocationDisplay), sourceLocationDisplay, targetWarehouseId: line.targetWarehouseId, targetLocationId: line.targetLocationId, targetBatchId: line.targetBatchId, targetLocationPath: locationDisplayName(targetLocationDisplay), targetLocationDisplay, quantity: Number(line.quantity) }; }) }); setOpen(true);
-    } catch (error) { fail(error); }
+    } catch (error) { hide(); fail(error); }
   };
   useEffect(() => {
     const documentId = new URLSearchParams(window.location.search).get('documentId');
@@ -468,8 +477,8 @@ export function StockDocumentsV110Page({ type }: { type: StockType }) {
         <Form.List name="lines">{(fields, { add, remove: removeLine }) => <>
           <Table bordered size="small" rowKey="key" pagination={false} tableLayout="fixed" scroll={{ x: 1036, y: 430 }} dataSource={fields} columns={[
             { title: '#', width: 46, render: (_: any, __: any, index: number) => index + 1 },
-            { title: '物料', width: 250, render: (_: any, field: any) => <InboundItemCell key={field.key} index={field.name} form={form} items={items} /> },
-            { title: '入库位置', width: 230, render: (_: any, field: any) => <InboundLocationCell key={field.key} index={field.name} form={form} locations={locations} onPick={() => {
+            { title: '物料', width: 250, render: (_: any, field: any) => <InboundItemCell key={field.key} index={field.name} form={form} items={items} itemOpts={itemOpts} /> },
+            { title: '入库位置', width: 230, render: (_: any, field: any) => <InboundLocationCell key={field.key} index={field.name} form={form} locMap={locMap} onPick={() => {
               const itemId = form.getFieldValue(['lines', field.name, 'itemId']);
               if (!itemId) { message.warning('请先选择物料'); return; }
               setInboundPicker({ index: field.name, itemId });

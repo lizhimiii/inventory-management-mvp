@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: registry.cn-beijing.aliyuncs.com/muta/postgres:14
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: "68182170"
+      POSTGRES_USER: root
+      POSTGRES_DB: testdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d testdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  inventory-api:
+    image: crpi-yvjk0pf887cblds4.cn-beijing.personal.cr.aliyuncs.com/tuech/inventory-api:1.8.0
+    restart: always
+    environment:
+      NODE_ENV: production
+      APP_ENV: production
+      APP_VERSION: "1.8.0"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: testdb
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: "68182170"
+      JWT_SECRET: "KOGV5TG151YGM0VV9PKVKW7E8Q8URWODU8DB897E8BQPYYLPUHL9EGJZ3ANWIKWY"
+      JWT_EXPIRES_IN: 8h
+      INITIAL_DEMO_PASSWORD: "88197112"
+      API_PORT: "3001"
+      UPLOAD_ROOT: /app/uploads
+    volumes:
+      - inv_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  inventory-web:
+    image: crpi-yvjk0pf887cblds4.cn-beijing.personal.cr.aliyuncs.com/tuech/inventory-web:1.8.0
+    restart: always
+    environment:
+      API_PROXY_TARGET: http://inventory-api:3001
+    ports:
+      - "8080:80"
+    depends_on:
+      - inventory-api
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+volumes:
+  pgdata:
+  inv_uploads:

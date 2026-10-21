@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Put, Query } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DataSource, QueryRunner } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { CurrentUser, Permissions } from '../auth/auth.decorators';
@@ -14,6 +14,7 @@ import { WarehouseStateService } from './warehouse-state.service';
 export class WarehousesController {
   constructor(private readonly db: DataSource, private readonly access: WarehouseAccessService, private readonly state: WarehouseStateService) {}
 
+  @ApiOperation({summary:'获取仓库列表（含库区数量，按当前用户权限过滤）'})
   @Get()
   @Permissions('master.view')
   async list(@CurrentUser() u: AuthUser) {
@@ -25,6 +26,7 @@ export class WarehousesController {
     );
   }
 
+  @ApiOperation({summary:'查询仓库已绑定的仓库管理员列表'})
   @Get(':id/managers')
   @Permissions('master.view')
   async managers(@Param('id') id: string) {
@@ -33,6 +35,7 @@ export class WarehousesController {
       WHERE wm.warehouse_id=$1 AND u.deleted_at IS NULL ORDER BY u.name`, [id]);
   }
 
+  @ApiOperation({summary:'设置仓库管理员（传 userId 数组，会覆盖旧绑定；只能绑定 positionType=WAREHOUSE_MANAGER 且 canApprove=true 的活跃账号）'})
   @Put(':id/managers')
   @Permissions('master.manage')
   async setManagers(@Param('id') id: string, @Body() dto: { userIds: string[] }, @CurrentUser() u: AuthUser) {
@@ -52,6 +55,7 @@ export class WarehousesController {
     } catch (e) { await qr.rollbackTransaction(); throw e; } finally { await qr.release(); }
   }
 
+  @ApiOperation({summary:'获取虚拟仓总览（所有仓库/库区/库位的库存汇总）'})
   @Get('virtual-overview')
   @Permissions('warehouse.virtual.view')
   async virtualOverviewEndpoint(@CurrentUser() u: AuthUser) {
@@ -59,12 +63,14 @@ export class WarehousesController {
     return { totals: data.summary, warehouses: data.warehouses };
   }
 
+  @ApiOperation({summary:'获取指定仓库或全仓的存储状态（汇总 + 库区树）'})
   @Get('storage-state')
   @Permissions('warehouse.virtual.view')
   async storageState(@Query('warehouseId') warehouseId: string | undefined, @CurrentUser() u: AuthUser) {
     return warehouseId ? this.state.workspace(u, warehouseId) : this.state.tree(u);
   }
 
+  @ApiOperation({summary:'获取仓库详情（含库区列表、库位列表、库存汇总、最近交易和单据）'})
   @Get(':id')
   @Permissions('warehouse.virtual.view')
   async get(@Param('id') id: string, @CurrentUser() u?: AuthUser) {
@@ -115,6 +121,7 @@ export class WarehousesController {
     return warehouse;
   }
 
+  @ApiOperation({summary:'新建仓库（含库区和库位定义，库区序号和名称不能重复）'})
   @Post()
   @Permissions('master.manage')
   async create(@Body() dto: any) {
@@ -141,6 +148,7 @@ export class WarehousesController {
     }
   }
 
+  @ApiOperation({summary:'更新仓库（支持修改编码、名称、库区/库位数量；修改编码会级联更新库位编码）'})
   @Patch(':id')
   @Permissions('master.manage')
   async update(@Param('id') id: string, @Body() dto: any) {
@@ -224,6 +232,7 @@ export class WarehousesController {
     }
   }
 
+  @ApiOperation({summary:'删除仓库（有关联数据则软归档，否则硬删除）'})
   @Delete(':id')
   @Permissions('master.delete')
   async remove(@Param('id') id: string) {
@@ -453,6 +462,7 @@ export class WarehousesController {
     return { totals, warehouses: warehouses.map((warehouse: any) => ({ ...warehouse, zones: zones.filter((zone: any) => zone.warehouseId === warehouse.id) })) };
   }
 
+  @ApiOperation({summary:'获取仓库概览统计（物料种类、总库存、库位利用率、零库存/低库存数量）'})
   @Get(':id/overview')
   @Permissions('warehouse.virtual.view')
   async overview(@Param('id') id: string, @CurrentUser() u: AuthUser) {
@@ -474,6 +484,7 @@ export class WarehousesController {
     return { ...warehouse, ...stats };
   }
 
+  @ApiOperation({summary:'获取仓库库位列表（按库区分组，含库存汇总）'})
   @Get(':id/locations')
   @Permissions('warehouse.virtual.view')
   async locations(@Param('id') id: string, @Query() q: any, @CurrentUser() u: AuthUser) {
@@ -501,6 +512,7 @@ export class WarehousesController {
     `, params);
   }
 
+  @ApiOperation({summary:'查看指定库位的库存明细（按物料+批次，含可用/冻结/预留数量）'})
   @Get(':id/locations/:locId/stock')
   @Permissions('warehouse.virtual.view')
   async locationStock(@Param('id') id: string, @Param('locId') locId: string, @CurrentUser() u: AuthUser) {
@@ -524,12 +536,14 @@ export class WarehousesController {
     `, [locId, id]);
   }
 
+  @ApiOperation({summary:'获取仓库工作台状态（用于前端渲染虚拟仓可视化）'})
   @Get(':id/workspace-state')
   @Permissions('warehouse.virtual.view')
   async workspaceState(@Param('id') id: string, @CurrentUser() u: AuthUser) {
     return this.state.workspace(u, id);
   }
 
+  @ApiOperation({summary:'获取库区物料汇总（指定库区内各物料的库存总量/可用/预留/库位数）'})
   @Get(':id/areas/:areaId/material-summary')
   @Permissions('warehouse.virtual.view')
   async areaMaterialSummary(@Param('id') id: string, @Param('areaId') areaId: string, @CurrentUser() u: AuthUser) {
@@ -550,6 +564,7 @@ export class WarehousesController {
     return { areaId, areaName: area.name, materials };
   }
 
+  @ApiOperation({summary:'获取库区指定物料的分布（各库位各批次的库存明细）'})
   @Get(':id/areas/:areaId/materials/:itemId/distribution')
   @Permissions('warehouse.virtual.view')
   async areaMaterialDistribution(@Param('id') id: string, @Param('areaId') areaId: string, @Param('itemId') itemId: string, @CurrentUser() u: AuthUser) {
@@ -564,6 +579,7 @@ export class WarehousesController {
       WHERE sb.warehouse_id=$1 AND loc.zone_id=$2 AND sb.item_id=$3 AND loc.is_archived=false ORDER BY loc.code,b.batch_no NULLS FIRST`, [id, areaId, itemId]);
   }
 
+  @ApiOperation({summary:'获取仓库布局列表（含版本和发布状态）'})
   @Get(':id/layouts')
   @Permissions('warehouse.virtual.view')
   async listLayouts(@Param('id') id: string, @CurrentUser() u: AuthUser) {
@@ -576,6 +592,7 @@ export class WarehousesController {
     );
   }
 
+  @ApiOperation({summary:'创建仓库布局（2D/3D，画布尺寸默认 1200x800）'})
   @Post(':id/layouts')
   @Permissions('warehouse.layout.edit')
   async createLayout(@Param('id') id: string, @Body() dto: any, @CurrentUser() u: AuthUser) {
@@ -591,6 +608,7 @@ export class WarehousesController {
     return { id: layoutId };
   }
 
+  @ApiOperation({summary:'保存布局节点（先清空旧节点再批量插入，支持库区/库位/货架等节点类型）'})
   @Put(':id/layouts/:layoutId/nodes')
   @Permissions('warehouse.layout.edit')
   async saveNodes(@Param('id') id: string, @Param('layoutId') layoutId: string, @Body() dto: { nodes: any[] }, @CurrentUser() u: AuthUser) {
@@ -610,6 +628,7 @@ export class WarehousesController {
     return { ok: true };
   }
 
+  @ApiOperation({summary:'发布布局为当前仓库启用版本（自动把其他布局置为 ARCHIVED）'})
   @Post(':id/layouts/:layoutId/publish')
   @Permissions('warehouse.layout.edit')
   async publishLayout(@Param('id') id: string, @Param('layoutId') layoutId: string, @CurrentUser() u: AuthUser) {
@@ -627,6 +646,7 @@ export class WarehousesController {
     return { ok: true };
   }
 
+  @ApiOperation({summary:'获取布局节点列表（返回节点坐标、尺寸、层级和样式配置）'})
   @Get(':id/layouts/:layoutId/nodes')
   @Permissions('warehouse.virtual.view')
   async getNodes(@Param('id') id: string, @Param('layoutId') layoutId: string, @CurrentUser() u: AuthUser) {

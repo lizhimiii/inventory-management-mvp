@@ -25,7 +25,7 @@ export async function seedDatabase(db: DataSource, includeMasterData = true) {
     await db.query(`UPDATE users SET position_type='SYSTEM_ADMIN',can_approve=true,department_name='系统管理部' WHERE username='admin'`);
   }
   if (createdUsers.has('warehouse')) {
-    await db.query(`UPDATE users SET position_type='WAREHOUSE_MANAGER',manager_user_id=$1,department_name='仓储部',can_approve=false WHERE username='warehouse'`, [admin.id]);
+    await db.query(`UPDATE users SET position_type='WAREHOUSE_MANAGER',manager_user_id=$1,department_name='仓储部',can_approve=true WHERE username='warehouse'`, [admin.id]);
   }
   if (createdUsers.has('production')) {
     await db.query(`UPDATE users SET position_type='PRODUCTION',manager_user_id=$1,department_name='生产部',can_approve=false WHERE username='production'`, [admin.id]);
@@ -58,7 +58,7 @@ export async function seedDatabase(db: DataSource, includeMasterData = true) {
     SELECT w.id,z.id,'DEFECTIVE01-DEFAULT','内部默认库位',true,'ACTIVE' FROM warehouses w
     JOIN warehouse_zones z ON z.warehouse_id=w.id AND z.sequence_no=1
     WHERE w.warehouse_code='DEFECTIVE'
-    ON CONFLICT(warehouse_id,code) DO NOTHING`);
+    ON CONFLICT(code) DO NOTHING`);
   await db.query(`INSERT INTO warehouse_manager(warehouse_id,user_id,created_by)
     SELECT w.id,u.id,$1 FROM warehouses w JOIN users u ON u.username='warehouse' WHERE w.warehouse_code IN ('RAW','FG','DEFECTIVE')
     ON CONFLICT(warehouse_id,user_id) DO NOTHING`, [admin.id]);

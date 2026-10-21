@@ -308,6 +308,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
             <Route path="/inbound" element={<StockDocumentsV110Page type="MATERIAL_INBOUND" />} />
             <Route path="/finished-inbound" element={<StockDocumentsV110Page type="FINISHED_INBOUND" />} />
             <Route path="/outbound" element={<StockDocumentsV110Page type="FINISHED_OUTBOUND" />} />
+            <Route path="/material-sales-outbound" element={<StockDocumentsV110Page type="MATERIAL_SALES_OUTBOUND" />} />
             <Route path="/adjustments" element={<StockDocumentsV110Page type="INVENTORY_ADJUSTMENT" />} />
             <Route path="/moves" element={<StockDocumentsV110Page type="STOCK_MOVE" />} />
             <Route path="/production" element={<LegacyProductionRedirect />} />
